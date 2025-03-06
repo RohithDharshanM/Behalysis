@@ -1,0 +1,51 @@
+import torch
+import cv2
+import numpy as np
+from yolov5.models.common import DetectMultiBackend
+
+# Load the trained YOLOv5 model directly
+model_path = "yolov5/runs/train/exp15/weights/last.pt"  # Update with your trained model path
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = DetectMultiBackend(model_path, device=device)
+model.model.eval()
+
+# Load class labels (assuming awake = 0, drowsy = 1)
+class_labels = ["Awake", "Drowsy"]
+
+# Initialize webcam
+cap = cv2.VideoCapture(0)
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Convert frame to YOLO input format
+    img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img_tensor = torch.from_numpy(img).float() / 255.0
+    img_tensor = img_tensor.permute(2, 0, 1).unsqueeze(0)  # Reshape for YOLO
+
+    # Run YOLOv5 inference
+    results = model(img_tensor)
+
+    # Extract detections
+    pred = results[0]  # YOLO returns a list; first item is the predictions
+    for det in pred:
+        x1, y1, x2, y2, conf, cls = det.tolist()  # Convert tensor to list
+        label = class_labels[int(cls)]
+        
+        # Draw bounding box and label
+        color = (0, 255, 0) if label == "Awake" else (0, 0, 255)
+        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+        cv2.putText(frame, f"{label} ({conf:.2f})", (int(x1), int(y1) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+    # Display frame with detections
+    cv2.imshow("Drowsiness Detection", frame)
+
+    # Exit on 'q' key press
+    if cv2.waitKey(10) & 0xFF == ord("q"):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
